@@ -53,3 +53,7 @@ dkms.conf
 
 .fake
 .ionide
+
+# Ignore bld and obj
+Project2/bin
+Project2/obj
