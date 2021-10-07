@@ -37,7 +37,7 @@ type MainCommands =
     | IFoundNeighbours of (int)
     | PushsumMessage of (int*float*float)
     | InitiatePushsum
-    | PushsumActorConverged of (float*float)
+    | PushsumActorConverged of (int*float*float)
 
 //*** Globals ***//
 let mutable numNodes = 27000
@@ -78,6 +78,8 @@ let findMyNeighbours (pool:list<IActorRef>, topology:string, myActorIndex:int) =
         let side = numNodes |> float |> cuberoot |> int
         let sidesquare = side * side
         myNeighbours <- Topologies.find3DNeighboursFor(pool, myActorIndex, side, sidesquare, numNodes)
+    | "full" ->
+        myNeighbours <- Topologies.findFullNeighboursFor(pool, myActorIndex, numNodes)
     | _ -> ()
     myNeighbours
 
@@ -129,6 +131,7 @@ let GossipActor (id:int) (mailbox:Actor<_>) =
         }
     loop()
 
+(*
 let PushsumActor (id:int) (mailbox:Actor<_>) =
     let mutable myNeighboursArray = []
     let myActorIndex = id
@@ -204,7 +207,87 @@ let PushsumActor (id:int) (mailbox:Actor<_>) =
             return! loop()
         }
     loop()
+*)
 
+let PushsumActor (id:int) (mailbox:Actor<_>) =
+    let mutable myNeighboursArray = []
+    let myActorIndex = id
+    let mutable s = id + 1 |> float
+    let mutable w = 1 |> float
+    let mutable prevRatio = s/w
+    let mutable towardsEnd = 0
+    let mutable isActive = 1
+    let mutable incomingsList = []
+    let mutable incomingwList = []
+    let mutable s_aggregateTminus1 = 0.0
+    let mutable w_aggregateTminus1 = 0.0
+    let mutable currRatio = s/w
+    let mutable count = 0
+ 
+    let rec loop () = actor {
+        if isActive = 1 then    
+            let! (message) = mailbox.Receive()
+
+            match message with 
+            | FindNeighbours(pool, topology) ->
+                myNeighboursArray <- findMyNeighbours(pool, topology, myActorIndex)
+                mainActorRef <! IFoundNeighbours(myActorIndex)
+                printfn "%d found neighbours \n" myActorIndex
+
+            | Round(_) ->
+                
+                // Step 2: s <- Σ(incomingsList) and w <- Σ(incomingwList)
+                // todo
+                s <- s_aggregateTminus1
+                w <- w_aggregateTminus1
+
+                // Step 3: Choose a random neighbour
+                let randomNeighbour = Random().Next(0, myNeighboursArray.Length)
+                let randomActor = myNeighboursArray.[randomNeighbour]
+
+                // Step 4: Send the pair ( ½s , ½w ) to randomNeighbour and self
+                randomActor <! PushsumMessage(myActorIndex , (s/2.0) , (w/2.0))
+                mailbox.Self <! PushsumMessage(myActorIndex , (s/2.0) , (w/2.0))
+
+                currRatio <- s / w
+                // Check if converged? only when you had atleast 1 incoming message from a neighbour
+                //if w_aggregateTminus1 <> w/2.0 then
+                if count <> 1 then
+                    if (abs(currRatio - prevRatio)) < (pown 10.0 -10) then 
+                        towardsEnd <- towardsEnd + 1
+                    else 
+                        towardsEnd <- 0
+                    
+                    if towardsEnd = 3 then 
+                        mainActorRef <! PushsumActorConverged(myActorIndex, s,w)
+                        isActive <- 0
+
+                prevRatio <- currRatio
+
+                // Reset the aggregate back to 0 after each round
+                // Also clear list todo
+                s_aggregateTminus1 <- 0.0
+                w_aggregateTminus1 <- 0.0
+                count <- 0
+                       
+            | PushsumMessage (fromIndex, incomings, incomingw) ->
+                // list to append 
+                count <- count + 1
+                incomingsList <- incomings :: incomingsList
+                incomingwList <- incomingw :: incomingwList
+
+                s_aggregateTminus1 <- s_aggregateTminus1 + incomings
+                w_aggregateTminus1 <- w_aggregateTminus1 + incomingw
+
+            | InitiatePushsum ->
+                mailbox.Self <! PushsumMessage(myActorIndex , s , w)
+                gossipSystem.Scheduler.ScheduleTellRepeatedly(TimeSpan.FromSeconds(0.0),TimeSpan.FromMilliseconds(30.0), mailbox.Self, Round)
+ 
+            | _ -> ()
+
+            return! loop()
+        }
+    loop()
 
 let MainActor (mailbox:Actor<_>) =
     printfn "Entered MainActor\n"
@@ -252,13 +335,9 @@ let MainActor (mailbox:Actor<_>) =
                     printfn "sending firstrumour to %d\n" randomNeighbour
                     randomActor <! GossipMessage(0, "theRumour")
                 | "pushsum" ->
-                    let randomNeighbour = Random().Next(actorsPool.Length)
-                    //let randomActor = actorsPool.[randomNeighbour]
-                    let randomActor = actorsPool.[1]
-
-                    // Send GossipMessage to it
-                    printfn "initiating pushum to %d\n" randomNeighbour
-                    randomActor <! InitiatePushsum
+                    // Initialize all
+                    actorsPool |> List.iter (fun item -> 
+                        item <! InitiatePushsum)
                 | _ -> ()
             | GossipActorStoppedTransmitting(actorName) ->
                 actorsDone <- actorsDone + 1
@@ -275,9 +354,9 @@ let MainActor (mailbox:Actor<_>) =
                     printfn "\nTotal time = %dms | Total Terminated = %d\n" timer.ElapsedMilliseconds actorsDone
                     printfn "\n SABKO PATA CHAL GAYA\n"
                     Environment.Exit(0) 
-            | PushsumActorConverged (s,w) ->
+            | PushsumActorConverged (index, s, w) ->
                 actorsDone <- actorsDone + 1
-                printfn "s = %f | w = %f | Total terminated = %d"  s w actorsDone
+                printfn "id = %d | s = %f | w = %f | s/w = %f | Total terminated = %d"  index s w (s/w) actorsDone
                 if actorsDone = numNodes then 
                     printfn "\n SAB CONVERGED\n"
                     timer.Stop()

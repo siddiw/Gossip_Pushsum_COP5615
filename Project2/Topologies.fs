@@ -7,7 +7,11 @@ open Akka.FSharp
 // Full/Mesh Topology
 // All nodes are connected to all other nodes.
 let findFullNeighboursFor (pool:list<IActorRef>, index:int, numNodes:int) =
-    let neighbourArray = pool |> List.indexed |> List.filter (fun (i, _) -> i <> index-1) |> List.map snd
+    let mutable neighbourArray = []
+    //let neighbourArray = pool |> List.indexed |> List.filter (fun (i, _) -> i <> index-1) |> List.map snd
+    for neighbourNode in 0..numNodes-1 do
+            if index <> neighbourNode then
+                neighbourArray <- pool.[neighbourNode] :: neighbourArray 
     neighbourArray
 
 
@@ -62,6 +66,6 @@ let find3DNeighboursFor (pool:list<IActorRef>, index:int, side:int, sidesquare:i
     // Z-axis
     if index >= sidesquare then 
         neighbourArray <- pool.[index-sidesquare] :: neighbourArray
-    if (numNodes - index) < sidesquare then 
+    if (numNodes - index) > sidesquare then 
         neighbourArray <- pool.[index+sidesquare] :: neighbourArray
     neighbourArray
