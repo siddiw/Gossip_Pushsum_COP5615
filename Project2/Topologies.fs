@@ -53,6 +53,7 @@ let find2DNeighboursFor (pool:list<IActorRef>, index:int, side:int, numNodes:int
 // Simple cube topology. Max 6 neighbours possible - X-axis : left & right | Y-axis : top & bottom | Z-axis : front & back
 let find3DNeighboursFor (pool:list<IActorRef>, index:int, side:int, sidesquare:int, numNodes:int) =
     let mutable neighbourArray = []
+    printfn "side = %d sidesquare = %d\n" side sidesquare
     // X-axis neighbours
     if (index % side) <> 0 then
        neighbourArray <- pool.[index-1] :: neighbourArray 
