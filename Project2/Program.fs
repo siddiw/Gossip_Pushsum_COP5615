@@ -176,7 +176,7 @@ let PushsumActor (id:int) (mailbox:Actor<_>) =
                 else 
                     towardsEnd <- 0
                 
-                if towardsEnd = 3 then 
+                if towardsEnd = 15 then 
                     mainActorRef <! PushsumActorConverged(myActorIndex, s,w)
                     isActive <- 0
 
@@ -197,7 +197,7 @@ let PushsumActor (id:int) (mailbox:Actor<_>) =
 
             | InitiatePushsum ->
                 mailbox.Self <! PushsumMessage(myActorIndex , s , w)
-                gossipSystem.Scheduler.ScheduleTellRepeatedly(TimeSpan.FromSeconds(0.0),TimeSpan.FromMilliseconds(25.0), mailbox.Self, Round)
+                gossipSystem.Scheduler.ScheduleTellRepeatedly(TimeSpan.FromSeconds(0.0),TimeSpan.FromMilliseconds(50.0), mailbox.Self, Round)
  
             | _ -> ()
 
@@ -231,7 +231,6 @@ let MainActor (mailbox:Actor<_>) =
                 actorsPool |> List.iter (fun item -> 
                     item <! FindNeighbours(actorsPool, topology))
 
-                printfn "\n done find neighbours head of pool = %s\n" actorsPool.Head.Path.Name
             | IFoundNeighbours(index) ->
                 topologyBuilt <- topologyBuilt + 1
                 if topologyBuilt = numNodes then 
