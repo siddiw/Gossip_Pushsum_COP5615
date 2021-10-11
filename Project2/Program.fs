@@ -11,6 +11,10 @@ open System.Diagnostics
 open System.Collections.Generic
 open Akka.Configuration
 
+// Set algo parameters here
+let pushsumConvergenceCriteria = 3
+let pushsumRoundsTimeMs = 100.0
+
 // Configuration
 let configuration = 
     ConfigurationFactory.ParseString(
@@ -21,16 +25,10 @@ let configuration =
             log-dead-letters-during-shutdown = off
         }")
 
-// Set algo parameters here
-let pushsumConvergenceCriteria = 3
-let pushsumRoundsTimeMs = 100.0
-
 let gossipSystem = ActorSystem.Create("GossipSystem", configuration)
 let mutable mainActorRef = null
 
 type MainCommands =
-    | Start of (string)
-    | Stop of (string)
     | FindNeighbours of (list<IActorRef> * string)
     | BuildTopology of (string)
     | GossipActorStoppedTransmitting of (string)
@@ -44,14 +42,12 @@ type MainCommands =
     | PushsumActorConverged of (int*float*float)
 
 //*** Globals ***//
+// Default
 let mutable numNodes = 27000
 let mutable topology = "3D"
 let mutable algorithm = "pushsum"
 let mutable actorsPool = []
 let mutable isImproper = false
-
-let proc = Process.GetCurrentProcess()
-let cpuTimeStamp = proc.TotalProcessorTime
 let timer = Stopwatch()
 
 // For 3D grid, rounding off the total nodes to next nearest cube
@@ -65,21 +61,18 @@ let roundOff2DNodes (numNodes:int) =
     pown sides 2
 
 
-
 // Each actor (node) will call this function to maintain its own list of neighbours
 let findMyNeighbours (pool:list<IActorRef>, topology:string, myActorIndex:int) = 
     let mutable myNeighbours = []
     match topology with 
     | "line" ->
-        printfn "Calling findLineNeighboursFor %d\n" myActorIndex
         myNeighbours <- Topologies.findLineNeighboursFor(pool, myActorIndex, numNodes)
-    | "2d" ->
+    | "2D" | "2d" | "imp2D" | "imp2d" ->
         let side = numNodes |> float |> sqrt |> int
         myNeighbours <- Topologies.find2DNeighboursFor(pool, myActorIndex, side, numNodes, isImproper)
     | "3D" | "3d" | "imp3D" | "imp3d" ->
         let side = numNodes |> float |> Math.Cbrt |> int
-        let sidesquare = side * side
-        myNeighbours <- Topologies.find3DNeighboursFor(pool, myActorIndex, side, sidesquare, numNodes, isImproper)
+        myNeighbours <- Topologies.find3DNeighboursFor(pool, myActorIndex, side, (side * side), numNodes, isImproper)
     | "full" ->
         myNeighbours <- Topologies.findFullNeighboursFor(pool, myActorIndex, numNodes)
     | _ -> ()
@@ -113,6 +106,7 @@ let GossipActor (id:int) (mailbox:Actor<_>) =
                     mainActorRef <! GossipActorStoppedTransmitting(mailbox.Self.Path.Name)
 
             | Round(_) ->
+                // Find a random neighbour form neighbour list
                 let randomNeighbour = Random().Next(myNeighboursArray.Length)
                 let randomActor = myNeighboursArray.[randomNeighbour]
                 // Send GossipMessage to it
@@ -196,9 +190,7 @@ let PushsumActor (myActorIndex:int) (mailbox:Actor<_>) =
         }
     loop()
 
-let MainActor (mailbox:Actor<_>) =
-    printfn "Entered MainActor\n"
-    
+let MainActor (mailbox:Actor<_>) =    
     let mutable actorsDone = 0
     let mutable actorsThatKnow = 0
     let mutable topologyBuilt = 0
@@ -228,39 +220,41 @@ let MainActor (mailbox:Actor<_>) =
                     printfn "Topology completely built! \n"
                     timer.Start()
                     mainActorRef <! StartAlgorithm(algorithm)
+
             | StartAlgorithm(algorithm) ->
                 //start algo
                 match algorithm with 
                 | "gossip" ->
                     // Randomly select a neighbour
                     let randomNeighbour = Random().Next(actorsPool.Length)
-                    //let randomActor = actorsPool.[randomNeighbour]
-                    let randomActor = actorsPool.[1]
-
+                    let randomActor = actorsPool.[randomNeighbour]
                     // Send GossipMessage to it
-                    printfn "sending firstrumour to %d\n" randomNeighbour
+                    printfn "Sending firstrumour to %d\n" randomNeighbour
                     randomActor <! GossipMessage(0, "theRumour")
                 | "pushsum" ->
                     // Initialize all
                     actorsPool |> List.iter (fun item -> 
                         item <! InitiatePushsum)
                 | _ -> ()
+
             | GossipActorStoppedTransmitting(actorName) ->
                 actorsDone <- actorsDone + 1
-                printfn "%s Terminated | Total terminated = %d" actorName actorsDone
+                (*printfn "%s Terminated | Total terminated = %d" actorName actorsDone
                 if actorsDone = numNodes then 
                     printfn "\n SAB TERMINATED\n"
                     timer.Stop()
                     printfn "Total time = %dms" timer.ElapsedMilliseconds
-                    Environment.Exit(0)
+                    Environment.Exit(0)*)
+
             | IReceivedRumour(actorIndex) ->
                 actorsThatKnow <- actorsThatKnow + 1
                 printfn "%d knows! Total = %d\n" actorIndex actorsThatKnow
-                (*if actorsThatKnow = numNodes then 
+                if actorsThatKnow = numNodes then 
                     timer.Stop()
                     printfn "\nTotal time = %dms | Total Terminated = %d\n" timer.ElapsedMilliseconds actorsDone
-                    printfn "\n SABKO PATA CHAL GAYA\n"
-                    Environment.Exit(0) *)
+                    printfn "\n\n Everyone knows the rumour!!\n"
+                    Environment.Exit(0)
+
             | PushsumActorConverged (index, s, w) ->
                 actorsDone <- actorsDone + 1
                 printfn "id = %d | s = %f | w = %f | s/w = %f | Total terminated = %d"  index s w (s/w) actorsDone
@@ -269,6 +263,7 @@ let MainActor (mailbox:Actor<_>) =
                     timer.Stop()
                     printfn "Total time = %dms" timer.ElapsedMilliseconds
                     Environment.Exit(0)
+
             | _ -> ()
 
             return! loop()
@@ -289,8 +284,6 @@ let main argv =
 
         if topology = "imp2D" || topology = "imp2d" || topology = "imp3D" || topology = "imp3d" then isImproper <- true
    
-    printfn "\n1 - %s 2 - %s 3 - %s" (numNodes.ToString()) topology algorithm
-
     mainActorRef <- spawn gossipSystem "MainActor" MainActor
     mainActorRef <! BuildTopology("start")
 
