@@ -12,8 +12,8 @@ open System.Collections.Generic
 open Akka.Configuration
 
 // Set algo parameters here
-let pushsumConvergenceCriteria = 3
-let pushsumRoundsTimeMs = 100.0
+let pushsumConvergenceCriteria = 15
+let pushsumRoundsTimeMs = 50.0
 
 // Configuration
 let configuration = 
@@ -251,7 +251,7 @@ let MainActor (mailbox:Actor<_>) =
                 printfn "%d knows! Total = %d\n" actorIndex actorsThatKnow
                 if actorsThatKnow = numNodes then 
                     timer.Stop()
-                    printfn "\nTotal time = %dms | Total Terminated = %d\n" timer.ElapsedMilliseconds actorsDone
+                    printfn "\nTotal time = %d ms | Total Terminated = %d\n" timer.ElapsedMilliseconds actorsDone
                     printfn "\n\n Everyone knows the rumour!!\n"
                     Environment.Exit(0)
 
@@ -259,7 +259,7 @@ let MainActor (mailbox:Actor<_>) =
                 actorsDone <- actorsDone + 1
                 printfn "id = %d | s = %f | w = %f | s/w = %f | Total terminated = %d"  index s w (s/w) actorsDone
                 if actorsDone = numNodes then 
-                    printfn "\n SAB CONVERGED\n"
+                    printfn "\n\n All nodes have converged!!\n\n"
                     timer.Stop()
                     printfn "Total time = %dms" timer.ElapsedMilliseconds
                     Environment.Exit(0)
