@@ -8,7 +8,7 @@ open Akka.Actor
 open Akka.Actor.Scheduler
 open Akka.FSharp
 open System.Diagnostics
-open System.Collections.Generic
+//open System.Collections.Generic
 open Akka.Configuration
 
 // Configuration
@@ -49,7 +49,7 @@ let proc = Process.GetCurrentProcess()
 let cpuTimeStamp = proc.TotalProcessorTime
 let timer = Stopwatch()
 
-let dictionary = new Dictionary<IActorRef, bool>()
+//let dictionary = new Dictionary<IActorRef, bool>()
 
 // For 3D grid, rounding off the total nodes to next nearest cube
 let roundOff3DNodes (numNodes:int) =
@@ -68,13 +68,24 @@ let findMyNeighbours (pool:list<IActorRef>, topology:string, myActorIndex:int) =
     | "line" ->
         printfn "Calling findLineNeighboursFor %d\n" myActorIndex
         myNeighbours <- Topologies.findLineNeighboursFor(pool, myActorIndex, numNodes)
-    | "2D" ->
+    | "2d" ->
         let side = numNodes |> float |> sqrt |> int
         myNeighbours <- Topologies.find2DNeighboursFor(pool, myActorIndex, side, numNodes)
-    | "3D" ->
+    | "3d" ->
         let side = numNodes |> float |> Math.Cbrt |> int
         let sidesquare = side * side
         myNeighbours <- Topologies.find3DNeighboursFor(pool, myActorIndex, side, sidesquare, numNodes)
+    | "imp3d" ->
+        let side = numNodes |> float |> Math.Cbrt |> int
+        let sidesquare = side * side
+        myNeighbours <- Topologies.find3DNeighboursFor(pool, myActorIndex, side, sidesquare, numNodes)
+        let r = System.Random()
+        let randomNeighbour =
+            pool
+            |> List.filter (fun x -> (x <> pool.[myActorIndex] && not (List.contains x myNeighbours)))
+            |> fun y -> y.[r.Next(y.Length - 1)]
+        myNeighbours <- randomNeighbour :: myNeighbours
+
     | "full" ->
         myNeighbours <- Topologies.findFullNeighboursFor(pool, myActorIndex, numNodes)
     | _ -> ()
