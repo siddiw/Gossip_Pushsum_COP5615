@@ -64,6 +64,8 @@ let roundOff2DNodes (numNodes:int) =
     let sides = numNodes |> float |> sqrt |> ceil |> int
     pown sides 2
 
+
+
 // Each actor (node) will call this function to maintain its own list of neighbours
 let findMyNeighbours (pool:list<IActorRef>, topology:string, myActorIndex:int) = 
     let mutable myNeighbours = []
@@ -71,7 +73,7 @@ let findMyNeighbours (pool:list<IActorRef>, topology:string, myActorIndex:int) =
     | "line" ->
         printfn "Calling findLineNeighboursFor %d\n" myActorIndex
         myNeighbours <- Topologies.findLineNeighboursFor(pool, myActorIndex, numNodes)
-    | "2D" ->
+    | "2d" ->
         let side = numNodes |> float |> sqrt |> int
         myNeighbours <- Topologies.find2DNeighboursFor(pool, myActorIndex, side, numNodes, isImproper)
     | "3D" | "3d" | "imp3D" | "imp3d" ->
